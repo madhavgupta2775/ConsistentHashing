@@ -27,7 +27,7 @@ tcp.on('connection', sock => {
   // register a database
   sock.on('data', data => {
     if (data == "Connect me as database!") {
-      active_servers.set(name, 10);
+      active_servers.set(name.split(':')[0], 10);
       sock.write('Registered as database node.');
       sock.destroy();
     } else {
@@ -40,24 +40,33 @@ tcp.on('connection', sock => {
 
 // send heartbeat to all active servers every 5 seconds
 setInterval(_ => {
+  console.log(`Active servers: ${active_servers.size}`);
   active_servers.forEach((chance, name) => {
     if (chance == 0) {
       console.log(`database ${name} deleted.`)
       active_servers.delete(name);
     } else {
-      console.log(`Sending heartbeat to ${name}`);
-      udp.send("Heartbeat", name.split(':')[1], name.split(':')[0]);
-      console.log(`data sent: Heartbeat, ${name.split(':')[1]}, ${name.split(':')[0]}`);
+      console.log(`Sending heartbeat to db_node with socket ${name}`);
+      udp.send("Heartbeat", 8085, name.split(':')[0], (err) => {
+        if (err) {
+          console.error(`Error while sending response: ${err}`);
+        } else {
+          console.log(`data sent: Heartbeat, ${heartbeat_port}, ${name.split(':')[0]}`);
+          console.log(`chance: ${chance}`);
+        }
+      });
+      // console.log(`data sent: Heartbeat, ${heartbeat_port}, ${name.split(':')[0]}`);
       active_servers.set(name, chance - 1);
     }
   });
 }, 5000);
 
-
 // Heartbeat response handler
-udp.on('data', (msg, rinfo) => {
-  console.log(`UDP got: ${msg} from ${rinfo.address}:${rinfo.port}\n`);
-  if (msg == "Heartbeat") {
-    active_servers.set(`${rinfo.address}:${rinfo.port}`, 10);
+udp.on('message', (msg, rinfo) => {
+  console.log(`UDP got: ${msg} from ${rinfo.address}:${rinfo.port}`);
+  const messageString = msg.toString();
+  if (messageString === "Heartbeat") {
+    console.log(`Received heartbeat from ${rinfo.address}:${rinfo.port}`);
+    active_servers.set(`${rinfo.address}`, 10);
   }
-}); 
+});

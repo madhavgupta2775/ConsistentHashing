@@ -1,13 +1,13 @@
 'use strict';
 import * as net from 'net';
-import * as dgram from 'dgram';
+import dgram from 'node:dgram';
 import * as os from 'os';
 import { get } from 'http';
 const heartbeat_port = process.env.HEARTBEAT_PORT ?? 8085;
 const server_name = process.env.SERVER_NAME ?? 'localhost';
 
 let client = new net.Socket();
-const socket = client.connect(heartbeat_port, server_name, function() {
+const socket = client.connect(8081, server_name, function() {
   client.write("Connect me as database!");
 });
 
@@ -32,11 +32,6 @@ const get_ip = _ => {
 console.log(get_ip());
 
 
-// store udp socket in a variable
-// const udp_socket = dgram.createSocket('udp4');
-// console.log(`UDP socket created.`);
-// udp_socket.bind(heartbeat_port);
-
 // create socket
 const udp_socket = dgram.createSocket('udp4');
 console.log(`UDP socket created.`);
@@ -53,10 +48,44 @@ udp_socket.on('error', err => {
   udp_socket.close();
 });
 
-udp_socket.on('message', (msg, rinfo_ip, rinfo_port) => {
-  console.log(`UDP got: ${msg} from ${rinfo_ip}:${rinfo_port}\n`);
-  if (msg == "Heartbeat") {
-    udp_socket.send("Heartbeat", rinfo_port, rinfo_ip);
-    console.log(`data sent: Heartbeat, ${rinfo_port}, ${rinfo_ip}`);
+let ignore_hearbeat = 3;
+
+// event listener for incoming messages
+udp_socket.on('message', (msg, rinfo) => {
+  console.log(`UDP got: ${msg} from ${rinfo.address}:${rinfo.port}`);
+
+  const messageString = msg.toString();
+  if (messageString === "Heartbeat") {
+    if(ignore_hearbeat > 0) {
+      ignore_hearbeat--;
+      return;
+    }
+
+    console.log(`Sending heartbeat to ${rinfo.address}:${rinfo.port}`);
+
+    // Send the response back to the sender
+    const responseMsg = "Heartbeat";
+
+    udp_socket.send(responseMsg, rinfo.port, rinfo.address, (err) => {
+      if (err) {
+        console.error(`Error while sending response: ${err}`);
+      } else {
+        console.log(`response sent: Heartbeat, ${rinfo.address}, ${rinfo.port}`);
+      }
+    });
   }
 });
+
+
+// send message to server every 5 seconds
+// setInterval(_ => {
+//   const responseMsg = "Heartbeat";
+//   udp_socket.send(responseMsg, (err) => {
+//     console.log(`Sending heartbeat to ${udp_socket.address().address}:${udp_socket.address().port}`);
+//     if (err) {
+//       console.error(`Error while sending response: ${err}`);
+//     } else {
+//       console.log(`data sent: Heartbeat, udp_socket.address().port, udp_socket.address().address`);
+//     }
+//   });
+// }, 5000);
